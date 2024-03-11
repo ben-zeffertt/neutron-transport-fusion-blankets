@@ -1,3 +1,4 @@
+
 import numpy as np
 import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3D
@@ -10,7 +11,8 @@ class Neutron:
     def __init__(self, speed, material='vacuum', initial_position=(0, 0, 0)):
         self.path = [initial_position]  # Initialize with position at origin
         self.status = 0  # Initialize as in range of simulation
-        self.direction = {'theta': np.pi / 2, 'phi': 0}  # Initialize moving in x direction
+        # Initialize moving in x direction
+        self.direction = {'theta': np.pi / 2, 'phi': 0}
         self.speed = speed  # Mean free paths per second
         self.material = material  # Material the neutron is in
 
@@ -33,7 +35,8 @@ class Neutron:
             y = self.path[-1][1] + self.speed * np.sin(self.direction['theta']) * np.sin(
                 self.direction['phi']) * (-record_lambda * np.log(np.random.uniform()))
             z = self.path[-1][2] + self.speed * \
-                np.cos(self.direction['theta']) * (-record_lambda * np.log(np.random.uniform()))
+                np.cos(self.direction['theta']) * \
+                (-record_lambda * np.log(np.random.uniform()))
         self.path.append((x, y, z))
 
     def absorb(self):
@@ -54,7 +57,7 @@ class Neutron:
 
 
 def simulate_neutron_flux_store(materials, proportions, number_density, scattering_cross_sections, absorption_cross_sections,
-                                num_iterations=1000, neutron_number=10, breeder_lims=(100, 200),
+                                num_iterations=300, neutron_number=10, breeder_lims=(100, 200),
                                 finite_space_lims=(0, 300), y_lims=(-50, 50), z_lims=(-50, 50), velocity=1):
     '''
     This function simulates a flux of neutrons from one direction for a certain number of iterations.
@@ -106,7 +109,8 @@ def simulate_neutron_flux_store(materials, proportions, number_density, scatteri
                     # Calculate the mean free path and absorption probability for the current
                     # material
                     record_lambda = 1 / \
-                        (number_density * absorption_cross_sections[neutron.material])
+                        (number_density *
+                         absorption_cross_sections[neutron.material])
                 else:
                     record_lambda = None
                 neutron.move(record_lambda)
@@ -115,14 +119,18 @@ def simulate_neutron_flux_store(materials, proportions, number_density, scatteri
                     (y > y_lims[0]) and (y < y_lims[1]) and
                         (z > z_lims[0]) and (z < z_lims[1])):
                     # Randomly choose a material for the neutron based on the proportions
-                    neutron.material = np.random.choice(materials, p=proportions)
+                    neutron.material = np.random.choice(
+                        materials, p=proportions)
                     if neutron.material != 'vacuum':
                         # Calculate the mean free path and absorption probability for the current
                         # material
                         record_lambda = 1 / \
-                            (number_density * absorption_cross_sections[neutron.material])
-                        prob_a = absorption_cross_sections[neutron.material] * number_density
-                        prob_s = scattering_cross_sections[neutron.material] * number_density
+                            (number_density *
+                             absorption_cross_sections[neutron.material])
+                        prob_a = absorption_cross_sections[neutron.material] * \
+                            number_density
+                        prob_s = scattering_cross_sections[neutron.material] * \
+                            number_density
                         if np.random.uniform() < prob_a:
                             neutron.absorb()
                             # Increment the count for the material
@@ -152,7 +160,172 @@ def simulate_neutron_flux_store(materials, proportions, number_density, scatteri
     return num_absorbed, num_transmitted, num_reflected, num_in_blanket, paths, absorbed_materials
 
 
+""" ~Ben Zeffertt
+I didn't want to edit your code so I've just made my own 'copy' function. 
+it is used to plot the various output numbers against time.
+it will also be used to find the time variation of the numbers so that a rate
+of tritium production can be found. 
+"""
+
+
+def simulate_neutron_flux_store_tracking(materials, proportions, number_density, scattering_cross_sections, absorption_cross_sections,
+                                         num_iterations=300, neutron_number=10, breeder_lims=(100, 200),
+                                         finite_space_lims=(0, 300), y_lims=(-50, 50), z_lims=(-50, 50), velocity=1):
+
+    neutrons = [Neutron(velocity, initial_position=(0, np.random.uniform(
+        *y_lims), np.random.uniform(*z_lims))) for _ in range(neutron_number)]
+
+    outcomes_tracking = {'num_absorbed': [], 'num_transmitted': [
+    ], 'num_reflected': [], 'num_in_blanket': [], 'time': []}
+    absorbed_materials_tracking = {material: [] for material in materials}
+    absorbed_materials_tracking['time'] = []
+
+    num_transmitted = 0
+    num_absorbed = 0
+    num_reflected = 0
+    num_in_blanket = 0
+    absorbed_materials = {material: 0 for material in materials}
+
+    for iteration in range(num_iterations):
+        for neutron in neutrons:
+            if neutron.status == 0:  # Only move neutrons that are still in the loop
+                if neutron.material != 'vacuum':
+                    # Calculate the mean free path and absorption probability for the current
+                    # material
+                    record_lambda = 1 / \
+                        (number_density *
+                         absorption_cross_sections[neutron.material])
+                else:
+                    record_lambda = None
+                neutron.move(record_lambda)
+                x, y, z = neutron.path[-1]
+                if ((x > breeder_lims[0]) and (x < breeder_lims[1]) and
+                    (y > y_lims[0]) and (y < y_lims[1]) and
+                        (z > z_lims[0]) and (z < z_lims[1])):
+                    # Randomly choose a material for the neutron based on the proportions
+                    neutron.material = np.random.choice(
+                        materials, p=proportions)
+                    if neutron.material != 'vacuum':
+                        # Calculate the mean free path and absorption probability for the current
+                        # material
+                        record_lambda = 1 / \
+                            (number_density *
+                             absorption_cross_sections[neutron.material])
+                        prob_a = absorption_cross_sections[neutron.material] * \
+                            number_density
+                        prob_s = scattering_cross_sections[neutron.material] * \
+                            number_density
+                        if np.random.uniform() < prob_a:
+                            neutron.absorb()
+                            # Increment the count for the material
+                            absorbed_materials[neutron.material] += 1
+                            num_absorbed += 1
+                        elif np.random.uniform() < prob_s:
+                            neutron.scatter()
+                if ((x > breeder_lims[1])  # if beyond blanket: "Transmitted"
+                    and ((y < y_lims[0]) or (y > y_lims[1]) or  # Out of fiducial range conditions
+                         (z < z_lims[0]) or (z > z_lims[1]) or (x > finite_space_lims[1]))):
+                    neutron.transmit()
+                    num_transmitted += 1
+                elif ((x < breeder_lims[0])  # if before blanket: "Reflected"
+                      and ((y < y_lims[0]) or (y > y_lims[1]) or  # Out of fiducial range conditions
+                           (z < z_lims[0]) or (z > z_lims[1]) or (x < finite_space_lims[0]))):
+                    neutron.reflect()
+                    num_reflected += 1
+                elif ((x > breeder_lims[0]) and (x < breeder_lims[1])  # if still "in blanket"
+                      and ((y < y_lims[0]) or (y > y_lims[1]) or  # Out of fiducial range conditions
+                           (z < z_lims[0]) or (z > z_lims[1]))):
+                    neutron.in_blanket()
+                    num_in_blanket += 1
+
+        # After processing all neutrons for this iteration, record the current counts.
+        outcomes_tracking['num_absorbed'].append(num_absorbed)
+        outcomes_tracking['num_transmitted'].append(num_transmitted)
+        outcomes_tracking['num_reflected'].append(num_reflected)
+        outcomes_tracking['num_in_blanket'].append(num_in_blanket)
+        outcomes_tracking['time'].append(iteration)
+
+        for material in materials:
+            absorbed_materials_tracking[material].append(
+                absorbed_materials[material])
+        absorbed_materials_tracking['time'].append(iteration)
+
+    return outcomes_tracking, absorbed_materials_tracking
+
+
+def calculate_tritium_production_rate(absorbed_materials_tracking):
+    lithium6_rates = [absorbed_materials_tracking['Lithium-6'][i] - absorbed_materials_tracking['Lithium-6'][i - 1]
+                      for i in range(1, len(absorbed_materials_tracking['Lithium-6']))]
+    lithium7_rates = [absorbed_materials_tracking['Lithium-7'][i] - absorbed_materials_tracking['Lithium-7'][i - 1]
+                      for i in range(1, len(absorbed_materials_tracking['Lithium-7']))]
+    tritium_rates = [li6 + li7 for li6,
+                     li7 in zip(lithium6_rates, lithium7_rates)]
+    tritium_cumulative = np.cumsum(tritium_rates).tolist()
+
+    # Insert a zero at the beginning of rates lists to align with the time steps
+    lithium6_rates.insert(0, 0)
+    lithium7_rates.insert(0, 0)
+    tritium_rates.insert(0, 0)
+
+    return lithium6_rates, lithium7_rates, tritium_rates, tritium_cumulative
+
+
 # %% Plotting Functions
+
+
+def plot_simulation_results(outcomes_tracking, absorbed_materials_tracking):
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plotting outcome counts
+    ax.plot(outcomes_tracking['time'],
+            outcomes_tracking['num_absorbed'], label='Absorbed')
+    ax.plot(outcomes_tracking['time'],
+            outcomes_tracking['num_transmitted'], label='Transmitted')
+    ax.plot(outcomes_tracking['time'],
+            outcomes_tracking['num_reflected'], label='Reflected')
+    ax.plot(outcomes_tracking['time'],
+            outcomes_tracking['num_in_blanket'], label='In Blanket')
+
+    # Plotting absorbed material counts
+    for material in absorbed_materials_tracking.keys():
+        if material != 'time':
+            ax.plot(absorbed_materials_tracking['time'],
+                    absorbed_materials_tracking[material], label=f'Absorbed in {material}')
+
+    ax.set_xlabel('Iteration (Time)')
+    ax.set_ylabel('Count')
+    ax.set_title('Neutron Outcomes Over Time')
+    ax.legend()
+    plt.show()
+
+
+def plot_tritium_rates(lithium6_rates, lithium7_rates, tritium_rates, tritium_cumulative, time):
+    # PLOT THE TRITIUM RATE OF PRODUCTION FROM Li6 and Li7 AND CUMULATIVE
+
+    plt.figure(figsize=(14, 7))
+
+    # Plot the rates of absorption for Lithium-6 and Lithium-7
+    plt.plot(time, lithium6_rates,
+             label='Lithium-6 Tritium Production Rate', marker='o')
+    plt.plot(time, lithium7_rates,
+             label='Lithium-7 Tritium Production Rate', marker='x')
+
+    # Plot the rate of tritium production
+    plt.plot(time, tritium_rates,
+             label='Total Tritium Production Rate', marker='^')
+
+    # Plot the cumulative tritium production
+    plt.plot(time[1:], tritium_cumulative,
+             label='Cumulative Tritium Production', linestyle='--')
+
+    # Adding titles and labels
+    plt.title('Tritium Production and Lithium Absorption Rates Over Time')
+    plt.xlabel('Time (Iterations)')
+    plt.ylabel('log(Number)')
+    plt.legend()
+    plt.yscale('log')
+    plt.grid(True)
+    plt.show()
 
 
 def plot_neutron_paths(paths, x_lims=(0, 300), y_lims=(-100, 100), z_lims=(-100, 100),
@@ -180,7 +353,8 @@ def plot_neutron_paths(paths, x_lims=(0, 300), y_lims=(-100, 100), z_lims=(-100,
     for i, path in enumerate(paths):
         if i % n == 0:  # Plot every nth path
             x, y, z = zip(*path)  # Unzip the coordinates
-            ax.plot(x, y, z, color=colors[i])  # Use line plot and color-code each path
+            # Use line plot and color-code each path
+            ax.plot(x, y, z, color=colors[i])
 
     # Set the limits of the x, y, and z axes
     ax.set_xlim(x_lims)  # Set x limits
@@ -208,8 +382,10 @@ def plot_pie_charts(num_reflected, num_transmitted, num_in_blanket, absorbed_mat
     """
     import matplotlib.pyplot as plt
 
-    processes = ['Reflection', 'Transmission', 'In Blanket'] + list(absorbed_materials.keys())
-    counts = [num_reflected, num_transmitted, num_in_blanket] + list(absorbed_materials.values())
+    processes = ['Reflection', 'Transmission', 'In Blanket'] + \
+        list(absorbed_materials.keys())
+    counts = [num_reflected, num_transmitted, num_in_blanket] + \
+        list(absorbed_materials.values())
     explode = (0.05,) * len(processes)
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.pie(counts, labels=processes, explode=explode, autopct='%1.0f%%')
@@ -219,16 +395,21 @@ def plot_pie_charts(num_reflected, num_transmitted, num_in_blanket, absorbed_mat
 def main():
     # Define the proprotions of material that exist within the breeder blanket
     materials = ['Lead', 'Lithium-6', 'Lithium-7']
-    proportions = [0.8, 0.1, 0.1]  # NB THE PROPROTIONS HAVE TO MATCH TO THE MATERIALS ABOVE
+    # NB THE PROPROTIONS HAVE TO MATCH TO THE MATERIALS ABOVE
+    proportions = [0.8, 0.1, 0.1]
     # Nuclear absorption cross section of the material
-    cross_section_absorptions = {'Lead': 0.2, 'Lithium-6': 0.2, 'Lithium-7': 0.2}
+    cross_section_absorptions = {'Lead': 0.2,
+                                 'Lithium-6': 0.2, 'Lithium-7': 0.2}
     # Nuclear scattering cross section of the material
-    cross_section_scatterings = {'Lead': 0.1, 'Lithium-6': 0.1, 'Lithium-7': 0.1}
+    cross_section_scatterings = {'Lead': 0.1,
+                                 'Lithium-6': 0.1, 'Lithium-7': 0.1}
     number_density = 0.2  # Number density of the material
-    number_iterations = 1000  # The time for which the simulation should run
+    number_iterations = 300  # The time for which the simulation should run
     neutron_number_set = 500  # The number of starting neutrons
-    breeder_lims_set = (100, 1200)  # The x values of where the breeder material begins and ends
-    xlims_set = (-50, breeder_lims_set[1] + 100)  # NB these are the boundary conditions for the
+    # The x values of where the breeder material begins and ends
+    breeder_lims_set = (100, 1200)
+    # NB these are the boundary conditions for the
+    xlims_set = (-50, breeder_lims_set[1] + 100)
     # simulation, can adjust as you wish.
     ylims_set = (-50, 50)
     zlims_set = (-50, 50)
@@ -253,7 +434,8 @@ def main():
     print(f"Number of Neutrons in Blanket: {num_in_blanket}")
 
     # Call the plot_pie_charts function
-    plot_pie_charts(num_reflected, num_transmitted, num_in_blanket, absorbed_materials)
+    plot_pie_charts(num_reflected, num_transmitted,
+                    num_in_blanket, absorbed_materials)
 
     # Call the plot_neutron_paths function
     plot_neutron_paths(paths, x_lims=xlims_set, y_lims=ylims_set,
@@ -262,6 +444,24 @@ def main():
     # plotting load.
 
     plt.show()
+
+    # PLOT THE SIMULATION RESULTS AGAINST TIME
+    outcomes_tracking, absorbed_materials_tracking = simulate_neutron_flux_store_tracking(
+        materials, proportions, number_density, cross_section_scatterings,
+        cross_section_absorptions, number_iterations, neutron_number_set, breeder_lims_set,
+        finite_space_lims=xlims_set, y_lims=ylims_set, z_lims=zlims_set, velocity=1)
+
+    # Call the plotting function for tracking results
+    plot_simulation_results(outcomes_tracking, absorbed_materials_tracking)
+
+    # PLOT THE TRITIUM RATE OF PRODUCTION FROM Li6 and Li7 AND CUMULATIVE
+
+    lithium6_rates, lithium7_rates, tritium_rates, tritium_cumulative = calculate_tritium_production_rate(
+        absorbed_materials_tracking)
+    time = absorbed_materials_tracking['time']
+
+    plot_tritium_rates(lithium6_rates, lithium7_rates,
+                       tritium_rates, tritium_cumulative, time)
 
 
 if __name__ == "__main__":
